@@ -1,9 +1,9 @@
 /* ============================================================
    1. INDEXED-DB STORAGE ENGINE
    ============================================================ */
-const DB_NAME = 'NeonPianoDB';
+const DB_NAME = 'NeonPianoBeatmapDB';
 const DB_VERSION = 1;
-const STORE_NAME = 'game_scores';
+const STORE_NAME = 'song_records';
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -56,12 +56,12 @@ async function getTopScores(limit = 3) {
 }
 
 /* ============================================================
-   2. LOW-LATENCY WEB AUDIO PIANO SYNTHESIZER
+   2. AUDIO SYNTHESIZER & SONG CONTROLLER
    ============================================================ */
 class PianoAudioEngine {
   constructor() {
     this.ctx = null;
-    this.laneFrequencies = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5 (Chord Progression)
+    this.laneFrequencies = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
   }
 
   init() {
@@ -79,7 +79,6 @@ class PianoAudioEngine {
     const now = this.ctx.currentTime;
     const freq = this.laneFrequencies[laneIndex] || 440;
 
-    // Harmonic Overtones for rich piano acoustic feel
     const osc1 = this.ctx.createOscillator();
     const osc2 = this.ctx.createOscillator();
     const gainNode = this.ctx.createGain();
@@ -90,11 +89,10 @@ class PianoAudioEngine {
     osc2.type = 'sine';
     osc2.frequency.setValueAtTime(freq * 2, now);
 
-    // Natural Piano ADSR envelope
     gainNode.gain.setValueAtTime(0.001, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.65, now + 0.015);
-    gainNode.gain.exponentialRampToValueAtTime(0.2, now + 0.18);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+    gainNode.gain.exponentialRampToValueAtTime(0.55, now + 0.015);
+    gainNode.gain.exponentialRampToValueAtTime(0.18, now + 0.16);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
 
     osc1.connect(gainNode);
     osc2.connect(gainNode);
@@ -102,22 +100,24 @@ class PianoAudioEngine {
 
     osc1.start(now);
     osc2.start(now);
-    osc1.stop(now + 0.86);
-    osc2.stop(now + 0.86);
+    osc1.stop(now + 0.71);
+    osc2.stop(now + 0.71);
   }
 }
 
 /* ============================================================
-   3. GAME ENGINE, PARTICLES & ANIMATION LOOP
+   3. GAME ENGINE, PARTICLES & BEATMAP SYNC
    ============================================================ */
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const audioEngine = new PianoAudioEngine();
+const bgSong = document.getElementById('bg-song');
 
 const scoreDisp = document.getElementById('score-display');
 const bestScoreDisp = document.getElementById('best-score-display');
 const comboDisp = document.getElementById('combo-display');
 const judgmentDisp = document.getElementById('judgment-display');
+const songProgressBar = document.getElementById('song-progress');
 const modal = document.getElementById('game-modal');
 const modalTitle = document.getElementById('modal-title');
 const modalStats = document.getElementById('modal-stats');
@@ -130,6 +130,7 @@ const laneTriggers = document.querySelectorAll('.lane-trigger');
 
 const LANE_COUNT = 4;
 const LANE_COLORS = ['#00f0ff', '#ff0077', '#ffd700', '#00ff88'];
+const TRAVEL_TIME = 1.6; // ระยะเวลา (วินาที) ที่โน้ตเดินทางจากบนสุดลงมาถึงเส้น Hit Line
 
 let gameState = 'START';
 let score = 0;
@@ -137,11 +138,8 @@ let combo = 0;
 let maxCombo = 0;
 let totalHits = 0;
 let perfectHits = 0;
-let notes = [];
+let beatmap = [];
 let particles = [];
-let lastSpawnTime = 0;
-let spawnInterval = 680;
-let noteSpeed = 6;
 let hitLineY = 0;
 let noteHeight = 70;
 let laneWidth = 0;
@@ -157,43 +155,43 @@ function resizeCanvas() {
   laneWidth = rect.width / LANE_COUNT;
   hitLineY = rect.height * 0.82;
   noteHeight = Math.max(50, rect.height * 0.08);
-  noteSpeed = rect.height * 0.0075;
 }
 
 window.addEventListener('resize', resizeCanvas);
 
-class Note {
-  constructor(lane) {
-    this.lane = lane;
-    this.y = -noteHeight;
-    this.hit = false;
-    this.missed = false;
+/* สร้างตารางจังหวะ Beatmap สอดคล้องกับบีท EDM ของเพลง (ประมาณ 134 BPM) */
+function generateBeatmap() {
+  const map = [];
+  const beatInterval = 0.447; // วินาทีต่อบีท
+  const totalDuration = 76;   // ความยาวเพลงโดยประมาณ
+  let currentSec = 2.0;       // เริ่มต้นหลังเปิดเพลง 2 วินาที
+
+  const patterns = [
+    [0, 1, 2, 3],
+    [3, 2, 1, 0],
+    [0, 2, 1, 3],
+    [1, 3, 0, 2],
+    [0, 1, 2, 1],
+    [3, 2, 1, 2]
+  ];
+
+  let patternIndex = 0;
+
+  while (currentSec < totalDuration) {
+    const pattern = patterns[patternIndex % patterns.length];
+    for (let i = 0; i < pattern.length; i++) {
+      map.push({
+        time: currentSec + i * beatInterval,
+        lane: pattern[i],
+        hit: false,
+        missed: false
+      });
+    }
+    currentSec += pattern.length * beatInterval;
+    patternIndex++;
   }
 
-  update(delta) {
-    this.y += noteSpeed * (delta / 16.66);
-  }
-
-  draw(context) {
-    const x = this.lane * laneWidth + 8;
-    const w = laneWidth - 16;
-    const color = LANE_COLORS[this.lane];
-
-    context.save();
-    context.fillStyle = color;
-    context.shadowColor = color;
-    context.shadowBlur = 15;
-
-    // Rounded glowing bar
-    context.beginPath();
-    context.roundRect(x, this.y, w, noteHeight, 10);
-    context.fill();
-
-    // Gloss effect
-    context.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    context.fillRect(x + 4, this.y + 4, w - 8, 4);
-    context.restore();
-  }
+  return map;
 }
 
 class HitParticle {
@@ -248,19 +246,25 @@ function handleLaneHit(laneIndex) {
 
   audioEngine.playTone(laneIndex);
 
-  // Activate lane visual
   laneTriggers[laneIndex].classList.add('active');
   setTimeout(() => laneTriggers[laneIndex].classList.remove('active'), 120);
 
-  // Hit detection threshold
-  const targetNote = notes.find(n => n.lane === laneIndex && !n.hit && !n.missed && Math.abs((n.y + noteHeight) - hitLineY) < noteHeight * 1.5);
+  const currentTime = bgSong.currentTime;
+  
+  // ค้นหาโน้ตในเลนนี้ที่มีเวลาใกล้เคียงกับเวลาเพลงปัจจุบัน
+  const targetNote = beatmap.find(n => 
+    n.lane === laneIndex && 
+    !n.hit && 
+    !n.missed && 
+    Math.abs(n.time - currentTime) <= 0.22
+  );
 
   if (targetNote) {
     targetNote.hit = true;
     totalHits++;
-    const diff = Math.abs((targetNote.y + noteHeight) - hitLineY);
+    const timeDiff = Math.abs(targetNote.time - currentTime);
 
-    if (diff < noteHeight * 0.45) {
+    if (timeDiff <= 0.08) {
       score += 150 + combo * 5;
       combo++;
       perfectHits++;
@@ -274,7 +278,7 @@ function handleLaneHit(laneIndex) {
     if (combo > maxCombo) maxCombo = combo;
     spawnParticles(laneIndex);
   } else {
-    // Tapped with no note (Penalty)
+    // แตะพลาดโดยไม่มีโน้ต
     combo = 0;
     setJudgment('MISS', '#ff0055');
   }
@@ -287,14 +291,18 @@ function updateHUD() {
   comboDisp.innerText = `${combo} COMBO`;
 }
 
-function gameLoop(time) {
+function gameLoop() {
   if (gameState !== 'PLAYING') return;
 
-  const delta = 16.66;
   const rect = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
 
-  // Draw Lane Dividing Guides
+  const currentTime = bgSong.currentTime;
+  const songDuration = bgSong.duration || 76;
+  const progressPercent = Math.min(100, (currentTime / songDuration) * 100);
+  songProgressBar.style.width = `${progressPercent}%`;
+
+  // เลนแบ่งช่อง
   ctx.lineWidth = 1;
   for (let i = 1; i < LANE_COUNT; i++) {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
@@ -304,7 +312,7 @@ function gameLoop(time) {
     ctx.stroke();
   }
 
-  // Draw Hit Zone Line
+  // เส้นเป้าหมายการกด (Hit Line)
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -312,23 +320,16 @@ function gameLoop(time) {
   ctx.lineTo(rect.width, hitLineY);
   ctx.stroke();
 
-  // Spawning Rhythm Notes
-  if (time - lastSpawnTime > spawnInterval) {
-    const randomLane = Math.floor(Math.random() * LANE_COUNT);
-    notes.push(new Note(randomLane));
-    lastSpawnTime = time;
-    // Gradually speed up
-    if (spawnInterval > 380) spawnInterval -= 1.5;
-  }
+  // วาดและอัปเดตโน้ตตามเวลาเพลง (Master Clock)
+  beatmap.forEach((note) => {
+    if (note.hit) return;
 
-  // Update & Draw Notes
-  for (let i = notes.length - 1; i >= 0; i--) {
-    const note = notes[i];
-    note.update(delta);
-    note.draw(ctx);
+    const timeDiff = note.time - currentTime;
+    // คำนวณตำแหน่ง Y ให้ถึง Hit Line ที่ timeDiff == 0
+    const y = hitLineY - (timeDiff / TRAVEL_TIME) * hitLineY - noteHeight;
 
-    // Miss condition
-    if (!note.hit && !note.missed && note.y > hitLineY + noteHeight * 0.8) {
+    // ถ้าเลยจุดกดเกิน 180ms โดยไม่โดนกด = MISS
+    if (!note.missed && timeDiff < -0.18) {
       note.missed = true;
       totalHits++;
       combo = 0;
@@ -336,13 +337,28 @@ function gameLoop(time) {
       updateHUD();
     }
 
-    // Cleanup offscreen notes
-    if (note.y > rect.height + 40 || note.hit) {
-      notes.splice(i, 1);
-    }
-  }
+    // วาดเฉพาะโน้ตที่อยู่บนหน้าจอ
+    if (y > -noteHeight && y < rect.height + 20 && !note.missed) {
+      const x = note.lane * laneWidth + 8;
+      const w = laneWidth - 16;
+      const color = LANE_COLORS[note.lane];
 
-  // Update & Draw Hit Particles
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 15;
+
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, noteHeight, 10);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fillRect(x + 4, y + 4, w - 8, 4);
+      ctx.restore();
+    }
+  });
+
+  // อนุภาคเอฟเฟกต์สะเก็ดแสง
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.update();
@@ -371,6 +387,7 @@ async function renderLeaderboard() {
 async function gameOver() {
   gameState = 'GAMEOVER';
   cancelAnimationFrame(animationFrameId);
+  bgSong.pause();
 
   const accuracy = totalHits > 0 ? Math.round((perfectHits / totalHits) * 100) : 0;
   await saveScoreRecord(score, maxCombo, accuracy);
@@ -379,7 +396,7 @@ async function gameOver() {
   finalComboEl.innerText = maxCombo.toString();
   finalAccEl.innerText = `${accuracy}%`;
 
-  modalTitle.innerText = 'GAME OVER';
+  modalTitle.innerText = 'SONG FINISHED!';
   modalStats.classList.remove('hide');
   startBtn.innerText = 'เล่นอีกครั้ง';
   await renderLeaderboard();
@@ -395,26 +412,29 @@ function startGame() {
   maxCombo = 0;
   totalHits = 0;
   perfectHits = 0;
-  notes = [];
   particles = [];
-  spawnInterval = 680;
-  lastSpawnTime = performance.now();
+  beatmap = generateBeatmap();
 
   updateHUD();
   setJudgment('READY', '#a0aec0');
 
   modal.classList.add('hide');
   gameState = 'PLAYING';
-  animationFrameId = requestAnimationFrame(gameLoop);
 
-  // 45 seconds game duration per round
-  setTimeout(() => {
-    if (gameState === 'PLAYING') gameOver();
-  }, 45000);
+  bgSong.currentTime = 0;
+  bgSong.play().catch(err => {
+    console.warn('เบราว์เซอร์ต้องการการแตะเพื่อเริ่มเล่นเสียง:', err);
+  });
+
+  animationFrameId = requestAnimationFrame(gameLoop);
 }
 
+bgSong.addEventListener('ended', () => {
+  if (gameState === 'PLAYING') gameOver();
+});
+
 /* ============================================================
-   4. MULTI-TOUCH CONTROLLER BINDINGS
+   4. MULTI-TOUCH CONTROLLER
    ============================================================ */
 laneTriggers.forEach((trigger) => {
   const lane = parseInt(trigger.dataset.lane, 10);
@@ -432,7 +452,6 @@ laneTriggers.forEach((trigger) => {
 
 startBtn.addEventListener('click', startGame);
 
-// Initialize DB and Leaderboard on page load
 window.addEventListener('DOMContentLoaded', async () => {
   resizeCanvas();
   await renderLeaderboard();
@@ -446,7 +465,7 @@ function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./service-worker.js')
-        .then(() => console.log('PWA Service Worker พร้อมทำงาน'))
+        .then(() => console.log('Service Worker พร้อมใช้งาน'))
         .catch((err) => console.warn('Service Worker registration failed:', err));
     });
   }

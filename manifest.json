@@ -1,7 +1,7 @@
 {
   "name": "Neon Piano: Rhythm Light",
   "short_name": "NeonPiano",
-  "description": "เกมเปียโนจับจังหวะโน้ตแสง สัมผัสคลื่นเสียงสังเคราะห์สุดลื่นไหล",
+  "description": "เกมเปียโนจับจังหวะแสง EDM สัมผัสคลื่นเสียงสุดลื่นไหล",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",

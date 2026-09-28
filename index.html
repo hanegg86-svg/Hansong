@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Neon Piano - Rhythm Light</title>
   <meta name="theme-color" content="#0a0b10">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
@@ -28,10 +29,15 @@
       </div>
     </header>
 
+    <!-- Song Progress Bar -->
+    <div id="progress-container">
+      <div id="song-progress"></div>
+    </div>
+
     <!-- Main Game Canvas -->
     <canvas id="game-canvas"></canvas>
 
-    <!-- Touch Target Indicator / Lanes Overlay -->
+    <!-- Touch Target Indicator / 4 Lanes -->
     <div id="lane-touch-overlay">
       <div class="lane-trigger" data-lane="0"><span>C4</span></div>
       <div class="lane-trigger" data-lane="1"><span>E4</span></div>
@@ -39,11 +45,14 @@
       <div class="lane-trigger" data-lane="3"><span>C5</span></div>
     </div>
 
-    <!-- Start / Pause / Game Over Modal -->
+    <!-- Audio Element -->
+    <audio id="bg-song" src="song.mp3" preload="auto"></audio>
+
+    <!-- Modal Dialog -->
     <div id="game-modal" class="modal-backdrop">
       <div class="modal-card">
         <h1 id="modal-title" class="neon-title">NEON PIANO</h1>
-        <p id="modal-desc" class="modal-sub">แตะที่แถบเปียโนให้ตรงกับแสงที่ตกลงมา</p>
+        <p id="modal-desc" class="modal-sub">เล่นเพลงตามแสงที่ตกลงมาให้ตรงจังหวะ</p>
         
         <div id="modal-stats" class="stats-panel hide">
           <div class="stat-item">
@@ -67,7 +76,7 @@
           </ul>
         </div>
 
-        <button id="start-btn" class="glow-button">เริ่มเล่นเกม</button>
+        <button id="start-btn" class="glow-button">เริ่มเล่นเพลง</button>
       </div>
     </div>
   </div>

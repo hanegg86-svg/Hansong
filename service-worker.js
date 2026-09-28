@@ -1,10 +1,11 @@
-const CACHE_NAME = 'neon-piano-cache-v1';
+const CACHE_NAME = 'neon-piano-song-v1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './style.css',
   './script.js',
-  './manifest.json'
+  './manifest.json',
+  './song.mp3'
 ];
 
 self.addEventListener('install', (event) => {
@@ -38,7 +39,6 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse;
       }
       return fetch(event.request).catch(() => {
-        // Fallback to cache index.html for navigation requests
         if (event.request.mode === 'navigate') {
           return caches.match('./index.html');
         }
