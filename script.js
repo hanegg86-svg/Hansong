@@ -61,7 +61,8 @@ async function getTopScores(limit = 3) {
 class PianoAudioEngine {
   constructor() {
     this.ctx = null;
-    this.laneFrequencies = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+    // ปรับจูนคีย์เสียงให้ตรงกับโทนสเกลเพลง (C4, E4, G4, B4/C5)
+    this.laneFrequencies = [261.63, 329.63, 392.00, 493.88];
   }
 
   init() {
@@ -90,9 +91,9 @@ class PianoAudioEngine {
     osc2.frequency.setValueAtTime(freq * 2, now);
 
     gainNode.gain.setValueAtTime(0.001, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.55, now + 0.015);
-    gainNode.gain.exponentialRampToValueAtTime(0.18, now + 0.16);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+    gainNode.gain.exponentialRampToValueAtTime(0.6, now + 0.012);
+    gainNode.gain.exponentialRampToValueAtTime(0.2, now + 0.15);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.65);
 
     osc1.connect(gainNode);
     osc2.connect(gainNode);
@@ -100,8 +101,8 @@ class PianoAudioEngine {
 
     osc1.start(now);
     osc2.start(now);
-    osc1.stop(now + 0.71);
-    osc2.stop(now + 0.71);
+    osc1.stop(now + 0.66);
+    osc2.stop(now + 0.66);
   }
 }
 
@@ -130,7 +131,7 @@ const laneTriggers = document.querySelectorAll('.lane-trigger');
 
 const LANE_COUNT = 4;
 const LANE_COLORS = ['#00f0ff', '#ff0077', '#ffd700', '#00ff88'];
-const TRAVEL_TIME = 1.6; // ระยะเวลา (วินาที) ที่โน้ตเดินทางจากบนสุดลงมาถึงเส้น Hit Line
+const TRAVEL_TIME = 1.5; // ความเร็วการตกลงมาของโน้ตสู่เส้น Hit Line
 
 let gameState = 'START';
 let score = 0;
@@ -159,39 +160,68 @@ function resizeCanvas() {
 
 window.addEventListener('resize', resizeCanvas);
 
-/* สร้างตารางจังหวะ Beatmap สอดคล้องกับบีท EDM ของเพลง (ประมาณ 134 BPM) */
+/* แกะโน้ตตามช่วงเวลาและเมโลดี้จริงของเพลง (134 BPM, 1 Beat = ~0.4477s) */
 function generateBeatmap() {
-  const map = [];
-  const beatInterval = 0.447; // วินาทีต่อบีท
-  const totalDuration = 76;   // ความยาวเพลงโดยประมาณ
-  let currentSec = 2.0;       // เริ่มต้นหลังเปิดเพลง 2 วินาที
+  const rawNotes = [
+    // --- ท่อน Intro (2.0s - 12.0s): ลายอาร์เพจจิโอสังเคราะห์เปิดตัว ---
+    { t: 2.24, l: 0 }, { t: 2.68, l: 1 }, { t: 3.13, l: 2 }, { t: 3.58, l: 3 },
+    { t: 4.03, l: 2 }, { t: 4.47, l: 1 }, { t: 4.92, l: 0 }, { t: 5.37, l: 2 },
+    { t: 5.82, l: 1 }, { t: 6.26, l: 3 }, { t: 6.71, l: 2 }, { t: 7.16, l: 0 },
+    { t: 7.61, l: 1 }, { t: 8.05, l: 2 }, { t: 8.50, l: 3 }, { t: 8.95, l: 2 },
+    { t: 9.40, l: 1 }, { t: 9.84, l: 0 }, { t: 10.29, l: 2 }, { t: 10.74, l: 1 },
+    { t: 11.19, l: 3 }, { t: 11.63, l: 2 },
 
-  const patterns = [
-    [0, 1, 2, 3],
-    [3, 2, 1, 0],
-    [0, 2, 1, 3],
-    [1, 3, 0, 2],
-    [0, 1, 2, 1],
-    [3, 2, 1, 2]
+    // --- ท่อน Verse / Main Melody A (12.0s - 26.0s): เมโลดี้หลักตามเสียงซินธ์นำ ---
+    { t: 12.53, l: 0 }, { t: 12.98, l: 2 }, { t: 13.42, l: 1 }, { t: 13.87, l: 3 },
+    { t: 14.32, l: 2 }, { t: 14.77, l: 2 }, { t: 15.21, l: 1 }, { t: 15.66, l: 0 },
+    { t: 16.11, l: 1 }, { t: 16.56, l: 2 }, { t: 17.00, l: 3 }, { t: 17.45, l: 2 },
+    { t: 17.90, l: 1 }, { t: 18.35, l: 0 }, { t: 18.79, l: 2 }, { t: 19.24, l: 3 },
+    { t: 19.69, l: 2 }, { t: 20.14, l: 1 }, { t: 20.58, l: 0 }, { t: 21.03, l: 1 },
+    { t: 21.48, l: 2 }, { t: 21.93, l: 3 }, { t: 22.37, l: 2 }, { t: 22.82, l: 1 },
+    { t: 23.27, l: 0 }, { t: 23.72, l: 2 }, { t: 24.16, l: 3 }, { t: 24.61, l: 2 },
+    { t: 25.06, l: 1 }, { t: 25.51, l: 0 },
+
+    // --- ท่อน Build-Up (26.0s - 40.0s): เพิ่มความถี่บีทและสแนร์รัวขึ้นตามเพลง ---
+    { t: 26.40, l: 0 }, { t: 26.85, l: 1 }, { t: 27.30, l: 2 }, { t: 27.75, l: 3 },
+    { t: 28.19, l: 2 }, { t: 28.64, l: 1 }, { t: 29.09, l: 0 }, { t: 29.54, l: 2 },
+    { t: 29.98, l: 3 }, { t: 30.43, l: 2 }, { t: 30.88, l: 1 }, { t: 31.33, l: 0 },
+    { t: 31.77, l: 1 }, { t: 32.22, l: 2 }, { t: 32.67, l: 3 }, { t: 33.12, l: 2 },
+    // จังหวะเร่งก่อนเข้าดรอป (ซอยจังหวะบีทถี่ขึ้น)
+    { t: 33.56, l: 1 }, { t: 33.79, l: 2 }, { t: 34.01, l: 3 }, { t: 34.46, l: 2 },
+    { t: 34.91, l: 1 }, { t: 35.13, l: 0 }, { t: 35.36, l: 2 }, { t: 35.80, l: 3 },
+    { t: 36.25, l: 0 }, { t: 36.47, l: 1 }, { t: 36.70, l: 2 }, { t: 37.15, l: 3 },
+    { t: 37.59, l: 2 }, { t: 37.82, l: 1 }, { t: 38.04, l: 2 }, { t: 38.49, l: 3 },
+    { t: 38.71, l: 2 }, { t: 38.94, l: 1 }, { t: 39.16, l: 0 }, { t: 39.38, l: 3 },
+
+    // --- ท่อน Drop / Chorus (40.0s - 58.0s): จุดพีคของเพลง จังหวะสลับโน้ตกระชับ ---
+    { t: 40.28, l: 0 }, { t: 40.73, l: 3 }, { t: 41.17, l: 1 }, { t: 41.62, l: 2 },
+    { t: 42.07, l: 0 }, { t: 42.29, l: 1 }, { t: 42.52, l: 2 }, { t: 42.96, l: 3 },
+    { t: 43.41, l: 2 }, { t: 43.86, l: 1 }, { t: 44.31, l: 0 }, { t: 44.75, l: 3 },
+    { t: 45.20, l: 2 }, { t: 45.42, l: 1 }, { t: 45.65, l: 2 }, { t: 46.10, l: 3 },
+    { t: 46.54, l: 0 }, { t: 46.99, l: 2 }, { t: 47.44, l: 1 }, { t: 47.89, l: 3 },
+    { t: 48.33, l: 2 }, { t: 48.56, l: 1 }, { t: 48.78, l: 0 }, { t: 49.23, l: 2 },
+    { t: 49.68, l: 3 }, { t: 50.12, l: 1 }, { t: 50.57, l: 2 }, { t: 51.02, l: 0 },
+    { t: 51.47, l: 3 }, { t: 51.69, l: 2 }, { t: 51.91, l: 1 }, { t: 52.36, l: 0 },
+    { t: 52.81, l: 2 }, { t: 53.26, l: 3 }, { t: 53.70, l: 1 }, { t: 54.15, l: 2 },
+    { t: 54.60, l: 0 }, { t: 55.05, l: 3 }, { t: 55.49, l: 2 }, { t: 55.94, l: 1 },
+    { t: 56.39, l: 0 }, { t: 56.84, l: 2 }, { t: 57.28, l: 3 }, { t: 57.73, l: 2 },
+
+    // --- ท่อน Melody B & Outro (58.0s - 74.0s): คลี่คลายเข้าสู่ท่อนจบของเพลง ---
+    { t: 58.63, l: 1 }, { t: 59.07, l: 0 }, { t: 59.52, l: 2 }, { t: 59.97, l: 3 },
+    { t: 60.42, l: 2 }, { t: 60.86, l: 1 }, { t: 61.31, l: 0 }, { t: 61.76, l: 2 },
+    { t: 62.21, l: 3 }, { t: 62.65, l: 1 }, { t: 63.10, l: 2 }, { t: 63.55, l: 0 },
+    { t: 64.00, l: 1 }, { t: 64.44, l: 3 }, { t: 64.89, l: 2 }, { t: 65.34, l: 0 },
+    { t: 65.79, l: 1 }, { t: 66.23, l: 2 }, { t: 66.68, l: 3 }, { t: 67.13, l: 2 },
+    { t: 67.58, l: 1 }, { t: 68.02, l: 0 }, { t: 68.92, l: 2 }, { t: 69.81, l: 1 },
+    { t: 70.71, l: 3 }, { t: 71.60, l: 2 }, { t: 72.50, l: 0 }, { t: 73.39, l: 3 }
   ];
 
-  let patternIndex = 0;
-
-  while (currentSec < totalDuration) {
-    const pattern = patterns[patternIndex % patterns.length];
-    for (let i = 0; i < pattern.length; i++) {
-      map.push({
-        time: currentSec + i * beatInterval,
-        lane: pattern[i],
-        hit: false,
-        missed: false
-      });
-    }
-    currentSec += pattern.length * beatInterval;
-    patternIndex++;
-  }
-
-  return map;
+  return rawNotes.map(item => ({
+    time: item.t,
+    lane: item.l,
+    hit: false,
+    missed: false
+  }));
 }
 
 class HitParticle {
