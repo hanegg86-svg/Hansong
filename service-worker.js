@@ -1,4 +1,4 @@
-const CACHE_NAME = 'neon-piano-song-v1';
+const CACHE_NAME = 'neon-piano-song-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
