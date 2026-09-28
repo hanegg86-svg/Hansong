@@ -1,0 +1,24 @@
+{
+  "name": "Neon Piano: Rhythm Light",
+  "short_name": "NeonPiano",
+  "description": "เกมเปียโนจับจังหวะโน้ตแสง สัมผัสคลื่นเสียงสังเคราะห์สุดลื่นไหล",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0b10",
+  "theme_color": "#0a0b10",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

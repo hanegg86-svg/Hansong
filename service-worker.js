@@ -1,77 +1,48 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Neon Piano - Rhythm Light</title>
-  <meta name="theme-color" content="#0a0b10">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div id="app-container">
-    <!-- Header HUD -->
-    <header id="hud">
-      <div class="hud-box">
-        <span class="hud-label">SCORE</span>
-        <span id="score-display" class="hud-value">0</span>
-      </div>
-      <div class="hud-center">
-        <span id="combo-display" class="hud-combo">0 COMBO</span>
-        <span id="judgment-display" class="hud-judgment">READY</span>
-      </div>
-      <div class="hud-box">
-        <span class="hud-label">BEST</span>
-        <span id="best-score-display" class="hud-value">0</span>
-      </div>
-    </header>
+const CACHE_NAME = 'neon-piano-cache-v1';
+const ASSETS_TO_CACHE = [
+  './',
+  './index.html',
+  './style.css',
+  './script.js',
+  './manifest.json'
+];
 
-    <!-- Main Game Canvas -->
-    <canvas id="game-canvas"></canvas>
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS_TO_CACHE);
+    })
+  );
+  self.skipWaiting();
+});
 
-    <!-- Touch Target Indicator / Lanes Overlay -->
-    <div id="lane-touch-overlay">
-      <div class="lane-trigger" data-lane="0"><span>C4</span></div>
-      <div class="lane-trigger" data-lane="1"><span>E4</span></div>
-      <div class="lane-trigger" data-lane="2"><span>G4</span></div>
-      <div class="lane-trigger" data-lane="3"><span>C5</span></div>
-    </div>
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      );
+    })
+  );
+  self.clients.claim();
+});
 
-    <!-- Start / Pause / Game Over Modal -->
-    <div id="game-modal" class="modal-backdrop">
-      <div class="modal-card">
-        <h1 id="modal-title" class="neon-title">NEON PIANO</h1>
-        <p id="modal-desc" class="modal-sub">แตะที่แถบเปียโนให้ตรงกับแสงที่ตกลงมา</p>
-        
-        <div id="modal-stats" class="stats-panel hide">
-          <div class="stat-item">
-            <span>คะแนนรอบนี้:</span>
-            <strong id="final-score">0</strong>
-          </div>
-          <div class="stat-item">
-            <span>คอมโบสูงสุด:</span>
-            <strong id="final-combo">0</strong>
-          </div>
-          <div class="stat-item">
-            <span>ความแม่นยำ:</span>
-            <strong id="final-accuracy">0%</strong>
-          </div>
-        </div>
-
-        <div id="leaderboard-section">
-          <h3>ประวัติสถิติสูงสุด (IndexedDB)</h3>
-          <ul id="high-score-list">
-            <li>กำลังโหลดสถิติ...</li>
-          </ul>
-        </div>
-
-        <button id="start-btn" class="glow-button">เริ่มเล่นเกม</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="script.js"></script>
-</body>
-</html>
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).catch(() => {
+        // Fallback to cache index.html for navigation requests
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+      });
+    })
+  );
+});
